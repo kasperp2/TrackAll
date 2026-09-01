@@ -8,3 +8,12 @@ export const users = pgTable('users', {
   avatar: text().notNull(),
   createdAt: timestamp().notNull().defaultNow(),
 })
+
+export const entities = pgTable('entities', {
+  id: serial().primaryKey(),
+  identifier: text().notNull().unique(),
+  name: text().notNull(),
+  type: text().notNull(),
+  point: geometry('point', { type: 'point', mode: 'xy', srid: 4326 }),
+  createdAt: timestamp().notNull().defaultNow(),
+})
