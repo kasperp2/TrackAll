@@ -8,7 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "opensky": "bun workers/opensky.ts"
+    "aisstream": "bun workers/aisstream.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

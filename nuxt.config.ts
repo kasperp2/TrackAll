@@ -3,6 +3,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     openskyClientId: '',
     openskyClientSecret: '',
+    aisstreamApiKey: '',
   },
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
