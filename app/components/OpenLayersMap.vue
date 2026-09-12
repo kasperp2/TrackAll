@@ -18,6 +18,7 @@ import Style from 'ol/style/Style.js';
 import Text from 'ol/style/Text.js';
 import Icon from 'ol/style/Icon.js';
 
+const viewStorageKey = 'trackall-map-view';
 
 const entitiesSource = new VectorSource({
   url: '/api/entities',
@@ -33,11 +34,11 @@ const entitiesLayer = new VectorLayer({
         rotation: parseInt(feature.get('angle') || '0') * Math.PI / 180,
         scale: 2,
       }),
-      // text: new Text({
-      //   text: feature.get('name'),
-      //   fill: new Fill({color: 'black'}),
-      //   stroke: new Stroke({color: 'white', width: 2}),
-      // }),
+      text: new Text({
+        text: feature.get('name'),
+        fill: new Fill({color: 'black'}),
+        stroke: new Stroke({color: 'white', width: 2}),
+      }),
     });
   }
 });
@@ -55,11 +56,38 @@ const view = new View({
 })
 
 const initMap = () => {
+  const savedView = localStorage.getItem(viewStorageKey)
+
+  if (savedView) {
+    try {
+      const { center, zoom } = JSON.parse(savedView)
+
+      if (Array.isArray(center) && typeof zoom === 'number') {
+        view.setCenter(center)
+        view.setZoom(zoom)
+      }
+    } catch {
+      localStorage.removeItem(viewStorageKey)
+    }
+  }
+
   const map = new Map({
     target: 'map',
     layers,
     view
   })
+
+  view.on('change:center', saveView)
+  view.on('change:resolution', saveView)
+}
+
+const saveView = () => {
+  const center = view.getCenter()
+  const zoom = view.getZoom()
+
+  if (center && zoom !== undefined) {
+    localStorage.setItem(viewStorageKey, JSON.stringify({ center, zoom }))
+  }
 }
 
 onMounted(() => {

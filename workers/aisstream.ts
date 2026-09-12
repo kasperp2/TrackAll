@@ -4,6 +4,8 @@ const API_KEY = 'f2dd41b0c95ac5be8cc586d05afbea80d74af084'
 
 const socket = new WebSocket("wss://stream.aisstream.io/v0/stream")
 
+let counter = 0
+
 socket.addEventListener("open", event => {
     socket.send(JSON.stringify({
         APIKey: API_KEY,
@@ -22,8 +24,8 @@ type AISMessage = {
     }
     Message: {
         PositionReport: {
-            Latitude: number,
-            Longitude: number,
+            Latitude: number, // WGS-84 latitude in decimal degrees
+            Longitude: number, // WGS-84 longitude in decimal degrees
             Cog: number,
             Sog: number,
         }
@@ -37,22 +39,27 @@ socket.addEventListener("message", async data => {
         const { MMSI, ShipName } = message.MetaData
         const { Latitude, Longitude, Cog, Sog } = message.Message.PositionReport
 
-        console.log(`MMSI: ${MMSI}, ShipName: ${ShipName}, Latitude: ${Latitude}, Longitude: ${Longitude}, Cog: ${Cog}, Sog: ${Sog}`)
+        // console.log(`MMSI: ${MMSI}, ShipName: ${ShipName}, Latitude: ${Latitude}, Longitude: ${Longitude}, Cog: ${Cog}, Sog: ${Sog}`)
+        counter++
 
         await db.insert(schema.entities)
             .values({
                 identifier: MMSI.toString(),
                 name: ShipName || 'Unknown',
                 type: 'Ship',
-                point: {x : Longitude || 0, y: Latitude || 0},
+                point: { x: Longitude || 0, y: Latitude || 0 },
                 angle: parseInt(Cog?.toString() || '0', 10),
             })
             .onConflictDoUpdate({
                 target: schema.entities.identifier,
                 set: {
-                    point: {x : Longitude || 0, y: Latitude || 0},
+                    point: { x: Longitude || 0, y: Latitude || 0 },
                     angle: parseInt(Cog?.toString() || '0', 10),
                 },
             })
     }
 })
+
+setInterval(() => {
+    console.log(`Received ${counter} messages`)
+}, 1000)

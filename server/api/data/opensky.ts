@@ -1,34 +1,34 @@
 import { db, schema } from '@nuxthub/db'
 
 enum PositionSource {
-  ADSB = 0,
-  ASTERIX = 1,
-  MLAT = 2,
-  FLARM = 3,
+    ADSB = 0,
+    ASTERIX = 1,
+    MLAT = 2,
+    FLARM = 3,
 }
 
 enum AircraftCategory {
-  NoInformation = 0,
-  NoADSBEmitterInfo = 1,
-  Light = 2,
-  Small = 3,
-  Large = 4,
-  HighVortexLarge = 5,
-  Heavy = 6,
-  HighPerformance = 7,
-  Rotorcraft = 8,
-  Glider = 9,
-  LighterThanAir = 10,
-  Parachutist = 11,
-  Ultralight = 12,
-  Reserved = 13,
-  UAV = 14,
-  SpaceVehicle = 15,
-  SurfaceVehicleEmergency = 16,
-  SurfaceVehicleService = 17,
-  PointObstacle = 18,
-  ClusterObstacle = 19,
-  LineObstacle = 20,
+    NoInformation = 0,
+    NoADSBEmitterInfo = 1,
+    Light = 2,
+    Small = 3,
+    Large = 4,
+    HighVortexLarge = 5,
+    Heavy = 6,
+    HighPerformance = 7,
+    Rotorcraft = 8,
+    Glider = 9,
+    LighterThanAir = 10,
+    Parachutist = 11,
+    Ultralight = 12,
+    Reserved = 13,
+    UAV = 14,
+    SpaceVehicle = 15,
+    SurfaceVehicleEmergency = 16,
+    SurfaceVehicleService = 17,
+    PointObstacle = 18,
+    ClusterObstacle = 19,
+    LineObstacle = 20,
 }
 
 /**
@@ -36,24 +36,24 @@ enum AircraftCategory {
  * See: https://openskynetwork.github.io/opensky-api/rest.html
  */
 type OpenSkyStateVector = [
-  icao24: string,
-  callsign: string | null,
-  origin_country: string,
-  time_position: number | null,
-  last_contact: number,
-  longitude: number | null,
-  latitude: number | null,
-  baro_altitude: number | null,
-  on_ground: boolean,
-  velocity: number | null,
-  true_track: number | null,
-  vertical_rate: number | null,
-  sensors: number[] | null,
-  geo_altitude: number | null,
-  squawk: string | null,
-  spi: boolean,
-  position_source: PositionSource,
-  category: AircraftCategory,
+    icao24: string,
+    callsign: string | null,
+    origin_country: string,
+    time_position: number | null,
+    last_contact: number,
+    longitude: number | null, // WGS-84 longitude in decimal degrees 
+    latitude: number | null, // WGS-84 latitude in decimal degrees
+    baro_altitude: number | null,
+    on_ground: boolean,
+    velocity: number | null,
+    true_track: number | null,
+    vertical_rate: number | null,
+    sensors: number[] | null,
+    geo_altitude: number | null,
+    squawk: string | null,
+    spi: boolean,
+    position_source: PositionSource,
+    category: AircraftCategory,
 ];
 
 const runtimeConfig = useRuntimeConfig()
@@ -82,7 +82,7 @@ export default eventHandler(async (event) => {
     if (!authResponse.ok) {
         throw new Error('Error fetching access token')
     }
-    
+
     const authData = await authResponse.json()
     const accessToken = authData.access_token
 
@@ -96,6 +96,8 @@ export default eventHandler(async (event) => {
         throw new Error('Error fetching data')
     }
 
+    const remainingCedits = dataResponse.headers.get('X-Rate-Limit-Remaining') || 'unknown'
+
     const data = await dataResponse.json()
 
     data.states.forEach(async (state: OpenSkyStateVector) => {
@@ -106,14 +108,14 @@ export default eventHandler(async (event) => {
                 identifier: icao24,
                 name: callsign?.trim() || 'Unknown',
                 type: 'Plane',
-                point: {x : longitude || 0, y: latitude || 0},
+                point: { x: longitude || 0, y: latitude || 0 },
                 angle: parseInt(true_track?.toString() || '0', 10),
                 speed: parseInt(velocity?.toString() || '0', 10),
             })
             .onConflictDoUpdate({
                 target: schema.entities.identifier,
                 set: {
-                    point: {x : longitude || 0, y: latitude || 0},
+                    point: { x: longitude || 0, y: latitude || 0 },
                     angle: parseInt(true_track?.toString() || '0', 10),
                     speed: parseInt(velocity?.toString() || '0', 10),
                 },
@@ -123,5 +125,6 @@ export default eventHandler(async (event) => {
     return {
         message: 'Data fetched and stored successfully',
         count: data.states.length,
+        remainingCedits,
     }
 })

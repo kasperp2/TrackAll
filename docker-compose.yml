@@ -1,9 +1,27 @@
 services:
-  db:
-    image: postgis/postgis:16-3.4
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: trackall
+  dev:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
     ports:
-      - "5432:5432"
+      - "3000:3000"
+
+  pooler:
+    image: curlimages/curl:latest
+    command: |
+      sh -c 'while true; do
+        echo "[$(date)] Calling API..."
+        curl -s http://dev:3000/api/data/opensky
+        echo ""
+        sleep 100
+      done'
+
+  worker:
+    build:
+      context: .
+      target: base
+    volumes:
+      - .:/app
+    entrypoint: ["bun", "--bun", "run", "aisstream"]
