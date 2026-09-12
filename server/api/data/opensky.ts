@@ -1,5 +1,4 @@
 import { db, schema } from '@nuxthub/db'
-import { sql } from 'drizzle-orm';
 
 enum PositionSource {
   ADSB = 0,
@@ -108,11 +107,15 @@ export default eventHandler(async (event) => {
                 name: callsign?.trim() || 'Unknown',
                 type: 'Plane',
                 point: {x : longitude || 0, y: latitude || 0},
+                angle: parseInt(true_track?.toString() || '0', 10),
+                speed: parseInt(velocity?.toString() || '0', 10),
             })
             .onConflictDoUpdate({
                 target: schema.entities.identifier,
                 set: {
                     point: {x : longitude || 0, y: latitude || 0},
+                    angle: parseInt(true_track?.toString() || '0', 10),
+                    speed: parseInt(velocity?.toString() || '0', 10),
                 },
             })
     })

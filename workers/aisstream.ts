@@ -8,7 +8,8 @@ socket.addEventListener("open", event => {
     socket.send(JSON.stringify({
         APIKey: API_KEY,
         // BoundingBoxes: [[[25.835, -80.208], [25.603, -79.879]]],
-        BoundingBoxes: [[[58, 5], [59, 6]]],
+        // BoundingBoxes: [[[55, 2], [62, 9]]],
+        BoundingBoxes: [[[-180, -90], [180, 90]]],
         FilterMessageTypes: ["PositionReport"]
     }))
 })
@@ -44,11 +45,13 @@ socket.addEventListener("message", async data => {
                 name: ShipName || 'Unknown',
                 type: 'Ship',
                 point: {x : Longitude || 0, y: Latitude || 0},
+                angle: parseInt(Cog?.toString() || '0', 10),
             })
             .onConflictDoUpdate({
                 target: schema.entities.identifier,
                 set: {
                     point: {x : Longitude || 0, y: Latitude || 0},
+                    angle: parseInt(Cog?.toString() || '0', 10),
                 },
             })
     }

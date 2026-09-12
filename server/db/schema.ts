@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, geometry } from 'drizzle-orm/pg-core'
+import { pgTable, text, serial, timestamp, geometry, integer, doublePrecision} from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
   id: serial().primaryKey(),
@@ -15,5 +15,7 @@ export const entities = pgTable('entities', {
   name: text().notNull(),
   type: text().notNull(),
   point: geometry('point', { type: 'point', mode: 'xy', srid: 4326 }),
+  angle: integer(),
+  speed: doublePrecision().default(0),
   createdAt: timestamp().notNull().defaultNow(),
 })
