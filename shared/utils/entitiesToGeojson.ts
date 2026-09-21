@@ -1,19 +1,13 @@
 import { db, schema } from '@nuxthub/db'
 
-// return geojson of all entities in the database
-export default eventHandler(async (event) => {
-    setHeader(event, 'Cache-Control', 'no-store')
-
-    const entities = await db.select().from(schema.entities)
-    // .limit(100)
-
-    const geojson = {
+export default function (entities: any[]): any {
+    return {
         type: 'FeatureCollection',
         features: entities.map((entity) => ({
             type: 'Feature',
             geometry: {
                 type: 'Point',
-                coordinates: [entity.point?.x, entity.point?.y],
+                coordinates: [entity.point.x, entity.point.y],
             },
             properties: {
                 name: entity.name,
@@ -23,6 +17,4 @@ export default eventHandler(async (event) => {
             },
         })),
     }
-
-    return geojson
-})
+}

@@ -5,12 +5,7 @@ import Map from 'ol/Map'
 import View from 'ol/View'
 import TileLayer from 'ol/layer/Tile'
 import OSM from 'ol/source/OSM'
-import {fromLonLat} from 'ol/proj.js';
-
 import GeoJSON from 'ol/format/GeoJSON.js';
-import VectorLayer from 'ol/layer/Vector.js';
-import VectorSource from 'ol/source/Vector.js';
-import Modify from 'ol/interaction/Modify.js';
 
 import Fill from 'ol/style/Fill.js';
 import Stroke from 'ol/style/Stroke.js';
@@ -18,14 +13,17 @@ import Style from 'ol/style/Style.js';
 import Text from 'ol/style/Text.js';
 import Icon from 'ol/style/Icon.js';
 
+import VectorTileLayer from 'ol/layer/VectorTile.js';
+import VectorTileSource from 'ol/source/VectorTile.js';
+
 const viewStorageKey = 'trackall-map-view';
 
-const entitiesSource = new VectorSource({
-  url: '/api/entities',
+const entitiesSource = new VectorTileSource({
   format: new GeoJSON(),
+  url: '/api/tiles/entities/{z}/{x}/{y}?limit=10',
 });
 
-const entitiesLayer = new VectorLayer({
+const entitiesLayer = new VectorTileLayer({
   source: entitiesSource,
   style: (feature, resolution) => {
     return new Style({
@@ -47,13 +45,13 @@ const layers = [
   new TileLayer({
     source: new OSM(),
   }),
+  // new TileLayer({
+  //   source: new TileDebug(),
+  // }),
   entitiesLayer
 ]
 
-const view = new View({
-  center: fromLonLat([8.371338, 54.838314]),
-  zoom: 5,
-})
+const view = new View()
 
 const initMap = () => {
   const savedView = localStorage.getItem(viewStorageKey)
@@ -92,6 +90,10 @@ const saveView = () => {
 
 onMounted(() => {
   initMap()
+
+  setInterval(() => {
+    entitiesSource.refresh()
+  }, 60000)
 
   // doesn't work
   // setInterval(() => {

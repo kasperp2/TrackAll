@@ -38,6 +38,8 @@ socket.addEventListener("message", async data => {
     if (message.MessageType === 'PositionReport') {
         const { MMSI, ShipName } = message.MetaData
         const { Latitude, Longitude, Cog, Sog } = message.Message.PositionReport
+        // knots to m/s
+        const speed = Sog ? Sog * 0.514444 : 0
 
         // console.log(`MMSI: ${MMSI}, ShipName: ${ShipName}, Latitude: ${Latitude}, Longitude: ${Longitude}, Cog: ${Cog}, Sog: ${Sog}`)
         counter++
@@ -49,12 +51,14 @@ socket.addEventListener("message", async data => {
                 type: 'Ship',
                 point: { x: Longitude || 0, y: Latitude || 0 },
                 angle: parseInt(Cog?.toString() || '0', 10),
+                speed,
             })
             .onConflictDoUpdate({
                 target: schema.entities.identifier,
                 set: {
                     point: { x: Longitude || 0, y: Latitude || 0 },
                     angle: parseInt(Cog?.toString() || '0', 10),
+                    speed,
                 },
             })
     }

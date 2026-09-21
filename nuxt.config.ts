@@ -11,5 +11,10 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   hub: {
     db: 'postgresql'
+  },
+  vite: {
+    server: {
+      allowedHosts: ['trackall.srv1463824.hstgr.cloud', 'dev']
+    }
   }
 })

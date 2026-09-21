@@ -6,14 +6,20 @@ services:
     volumes:
       - .:/app
     ports:
-      - "3000:3000"
+      - "${PORT}:${PORT}"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(`${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=websecure
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.tls.certresolver=letsencrypt
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.port=${PORT}
 
   pooler:
     image: curlimages/curl:latest
     command: |
       sh -c 'while true; do
         echo "[$(date)] Calling API..."
-        curl -s http://dev:3000/api/data/opensky
+        curl -s http://dev:${PORT}/api/data/opensky
         echo ""
         sleep 100
       done'
@@ -25,3 +31,7 @@ services:
     volumes:
       - .:/app
     entrypoint: ["bun", "--bun", "run", "aisstream"]
+
+networks:
+  traefik-proxy:
+    external: true
