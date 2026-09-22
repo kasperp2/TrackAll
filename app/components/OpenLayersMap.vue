@@ -5,6 +5,7 @@ import Map from 'ol/Map'
 import View from 'ol/View'
 import TileLayer from 'ol/layer/Tile'
 import OSM from 'ol/source/OSM'
+import ImageTile from 'ol/source/ImageTile';
 import GeoJSON from 'ol/format/GeoJSON'
 
 import Fill from 'ol/style/Fill'
@@ -15,80 +16,33 @@ import Icon from 'ol/style/Icon'
 
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
-import { bbox as bboxStrategy } from 'ol/loadingstrategy.js';
 import { transformExtent } from 'ol/proj';
-
-const getDeltaPosition = (angle: number, speed: number, deltaTime: number) => {
-	const bearingRadians = angle * Math.PI / 180
-	const distance = speed * (deltaTime / 1000)
-
-	const deltaX = distance * Math.sin(bearingRadians)
-	const deltaY = distance * Math.cos(bearingRadians)
-
-	return { deltaX, deltaY }
-}
+import { buffer } from 'ol/extent';
 
 const translateFeature = (feature: any, deltaTime: number) => {
+	// speed buffer to avoid jittering when speed is very low
+	if (feature.get('speed') < 0.1) return
+
 	const geometry = feature.getGeometry()
 	if (geometry) {
-		const { deltaX, deltaY } = getDeltaPosition(feature.get('angle'), feature.get('speed'), deltaTime)
+		const angle = feature.get('angle') || 0
+		const speed = feature.get('speed') || 0
+		const bearingRadians = angle * Math.PI / 180
+		const distance = speed * (deltaTime / 1000)
+
+		const deltaX = distance * Math.sin(bearingRadians)
+		const deltaY = distance * Math.cos(bearingRadians)
 		geometry.translate(deltaX, deltaY)
 	}
 }
 
 const viewStorageKey = 'trackall-map-view'
 
-const geoJsonFormat = new GeoJSON();
-let allowNextLoad = true;
+const geoJsonFormat = new GeoJSON()
 
 const entitiesSource = new VectorSource({
 	format: geoJsonFormat,
-
-	loader: async (extent, resolution, projection) => {
-		if (!allowNextLoad) return []
-		allowNextLoad = false;
-
-		const bbox4326 = transformExtent(
-			extent,
-			projection.getCode(),
-			'EPSG:4326'
-		);
-
-		const params = new URLSearchParams({
-			limit: '100',
-			bbox: bbox4326.join(','),
-		});
-
-		const response = await fetch(`/api/entities?${params}`);
-
-		if (!response.ok) {
-			throw new Error(`Request failed: ${response.status}`);
-		}
-
-		const json = await response.json();
-
-		const features = geoJsonFormat.readFeatures(json, {
-			featureProjection: projection,
-		});
-
-		features.forEach((feature) => {
-			const updatedAt = feature.get('updatedAt');
-			if (updatedAt) {
-				const timeSinceUpdate = Date.now() - new Date(updatedAt).getTime();
-				translateFeature(feature, timeSinceUpdate);
-			}
-		});
-
-		return features;
-	},
-
-	strategy: bboxStrategy,
 });
-
-const entitiesSourceRefresh = () => {
-	allowNextLoad = true;
-	entitiesSource.refresh();
-};
 
 const entitiesLayer = new VectorLayer({
 	source: entitiesSource,
@@ -114,6 +68,12 @@ const layers = [
 	}),
 	// new TileLayer({
 	//   source: new TileDebug(),
+	// }),
+	// new TileLayer({
+	// 	source: new ImageTile({
+	// 		url: 'https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=1hyT1y4oXe5v2NwUfbuI',
+	// 		tileSize: 512,
+	// 	})
 	// }),
 	entitiesLayer
 ]
@@ -156,16 +116,64 @@ const initMap = () => {
 	})
 
 	map.value.on('moveend', () => {
-		entitiesSourceRefresh()
+		loadEntities()
 	});
+}
+
+const loadEntities = async () => {
+	const extent = view.calculateExtent(map.value?.getSize())
+	const projection = view.getProjection()
+	if (!extent || !projection) return
+
+	const bbox4326 = transformExtent(
+		buffer(extent, 10000),
+		projection.getCode(),
+		'EPSG:4326'
+	);
+
+	const params = new URLSearchParams({
+		limit: '1500',
+		bbox: bbox4326.join(','),
+	});
+
+	const response = await fetch(`/api/entities?${params}`);
+
+	if (!response.ok) {
+		throw new Error(`Request failed: ${response.status}`);
+	}
+
+	const json = await response.json();
+
+	const features = geoJsonFormat.readFeatures(json, {
+		featureProjection: projection,
+	});
+
+	// remove features that are no longer present in the new data
+	const newFeatureIds = new Set(features.map(f => f.getId()));
+	entitiesSource.getFeatures().forEach((feature) => {
+		if (!newFeatureIds.has(feature.getId())) {
+			entitiesSource.removeFeature(feature);
+		}
+	});
+
+	features.forEach((feature) => {
+		const updatedAt = feature.get('updatedAt');
+		if (updatedAt) {
+			const timeSinceUpdate = Date.now() - new Date(updatedAt).getTime();
+			translateFeature(feature, timeSinceUpdate);
+		}
+	});
+
+	entitiesSource.addFeatures(features);
 }
 
 onMounted(() => {
 	initMap()
 
+	loadEntities()
+
 	setInterval(() => {
-		entitiesSourceRefresh()
-		console.log('Timed Refresh of entities source')
+		loadEntities()
 	}, 10000)
 
 	let lastUpdateTime = Date.now()
@@ -183,7 +191,6 @@ onMounted(() => {
 			lastUpdateTime = currentTime
 		}
 	}, 500)
-
 })
 </script>
 
