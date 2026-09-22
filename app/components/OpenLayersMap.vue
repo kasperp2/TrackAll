@@ -5,122 +5,195 @@ import Map from 'ol/Map'
 import View from 'ol/View'
 import TileLayer from 'ol/layer/Tile'
 import OSM from 'ol/source/OSM'
-import GeoJSON from 'ol/format/GeoJSON.js';
+import GeoJSON from 'ol/format/GeoJSON'
 
-import Fill from 'ol/style/Fill.js';
-import Stroke from 'ol/style/Stroke.js';
-import Style from 'ol/style/Style.js';
-import Text from 'ol/style/Text.js';
-import Icon from 'ol/style/Icon.js';
+import Fill from 'ol/style/Fill'
+import Stroke from 'ol/style/Stroke'
+import Style from 'ol/style/Style'
+import Text from 'ol/style/Text'
+import Icon from 'ol/style/Icon'
 
-import VectorTileLayer from 'ol/layer/VectorTile.js';
-import VectorTileSource from 'ol/source/VectorTile.js';
+import VectorLayer from 'ol/layer/Vector'
+import VectorSource from 'ol/source/Vector'
+import { bbox as bboxStrategy } from 'ol/loadingstrategy.js';
+import { transformExtent } from 'ol/proj';
 
-const viewStorageKey = 'trackall-map-view';
+const getDeltaPosition = (angle: number, speed: number, deltaTime: number) => {
+	const bearingRadians = angle * Math.PI / 180
+	const distance = speed * (deltaTime / 1000)
 
-const entitiesSource = new VectorTileSource({
-  format: new GeoJSON(),
-  url: '/api/tiles/entities/{z}/{x}/{y}?limit=10',
-});
+	const deltaX = distance * Math.sin(bearingRadians)
+	const deltaY = distance * Math.cos(bearingRadians)
 
-const entitiesLayer = new VectorTileLayer({
-  source: entitiesSource,
-  style: (feature, resolution) => {
-    return new Style({
-      image: new Icon({
-        src: feature.get('type') === 'Plane' ? '/plane.svg' : '/boat.svg',
-        rotation: parseInt(feature.get('angle') || '0') * Math.PI / 180,
-        scale: 2,
-      }),
-      text: new Text({
-        text: feature.get('name'),
-        fill: new Fill({color: 'black'}),
-        stroke: new Stroke({color: 'white', width: 2}),
-      }),
-    });
-  }
-});
-
-const layers = [
-  new TileLayer({
-    source: new OSM(),
-  }),
-  // new TileLayer({
-  //   source: new TileDebug(),
-  // }),
-  entitiesLayer
-]
-
-const view = new View()
-
-const initMap = () => {
-  const savedView = localStorage.getItem(viewStorageKey)
-
-  if (savedView) {
-    try {
-      const { center, zoom } = JSON.parse(savedView)
-
-      if (Array.isArray(center) && typeof zoom === 'number') {
-        view.setCenter(center)
-        view.setZoom(zoom)
-      }
-    } catch {
-      localStorage.removeItem(viewStorageKey)
-    }
-  }
-
-  const map = new Map({
-    target: 'map',
-    layers,
-    view
-  })
-
-  view.on('change:center', saveView)
-  view.on('change:resolution', saveView)
+	return { deltaX, deltaY }
 }
 
-const saveView = () => {
-  const center = view.getCenter()
-  const zoom = view.getZoom()
+const translateFeature = (feature: any, deltaTime: number) => {
+	const geometry = feature.getGeometry()
+	if (geometry) {
+		const { deltaX, deltaY } = getDeltaPosition(feature.get('angle'), feature.get('speed'), deltaTime)
+		geometry.translate(deltaX, deltaY)
+	}
+}
 
-  if (center && zoom !== undefined) {
-    localStorage.setItem(viewStorageKey, JSON.stringify({ center, zoom }))
-  }
+const viewStorageKey = 'trackall-map-view'
+
+const geoJsonFormat = new GeoJSON();
+let allowNextLoad = true;
+
+const entitiesSource = new VectorSource({
+	format: geoJsonFormat,
+
+	loader: async (extent, resolution, projection) => {
+		if (!allowNextLoad) return []
+		allowNextLoad = false;
+
+		const bbox4326 = transformExtent(
+			extent,
+			projection.getCode(),
+			'EPSG:4326'
+		);
+
+		const params = new URLSearchParams({
+			limit: '100',
+			bbox: bbox4326.join(','),
+		});
+
+		const response = await fetch(`/api/entities?${params}`);
+
+		if (!response.ok) {
+			throw new Error(`Request failed: ${response.status}`);
+		}
+
+		const json = await response.json();
+
+		const features = geoJsonFormat.readFeatures(json, {
+			featureProjection: projection,
+		});
+
+		features.forEach((feature) => {
+			const updatedAt = feature.get('updatedAt');
+			if (updatedAt) {
+				const timeSinceUpdate = Date.now() - new Date(updatedAt).getTime();
+				translateFeature(feature, timeSinceUpdate);
+			}
+		});
+
+		return features;
+	},
+
+	strategy: bboxStrategy,
+});
+
+const entitiesSourceRefresh = () => {
+	allowNextLoad = true;
+	entitiesSource.refresh();
+};
+
+const entitiesLayer = new VectorLayer({
+	source: entitiesSource,
+	style: (feature, resolution) => {
+		return new Style({
+			image: new Icon({
+				src: feature.get('type') === 'Plane' ? '/plane.svg' : '/boat.svg',
+				rotation: parseInt(feature.get('angle') || '0') * Math.PI / 180,
+				scale: 2,
+			}),
+			text: new Text({
+				text: feature.get('name'),
+				fill: new Fill({ color: 'black' }),
+				stroke: new Stroke({ color: 'white', width: 2 }),
+			}),
+		})
+	}
+})
+
+const layers = [
+	new TileLayer({
+		source: new OSM(),
+	}),
+	// new TileLayer({
+	//   source: new TileDebug(),
+	// }),
+	entitiesLayer
+]
+
+const saveView = () => {
+	const center = view.getCenter()
+	const zoom = view.getZoom()
+
+	if (center && zoom !== undefined) {
+		localStorage.setItem(viewStorageKey, JSON.stringify({ center, zoom }))
+	}
+}
+
+const view = new View()
+view.on('change:center', saveView)
+view.on('change:resolution', saveView)
+
+const map = ref<Map | null>(null)
+
+const initMap = () => {
+	const savedView = localStorage.getItem(viewStorageKey)
+
+	if (savedView) {
+		try {
+			const { center, zoom } = JSON.parse(savedView)
+
+			if (Array.isArray(center) && typeof zoom === 'number') {
+				view.setCenter(center)
+				view.setZoom(zoom)
+			}
+		} catch {
+			localStorage.removeItem(viewStorageKey)
+		}
+	}
+
+	map.value = new Map({
+		target: 'map',
+		layers,
+		view
+	})
+
+	map.value.on('moveend', () => {
+		entitiesSourceRefresh()
+	});
 }
 
 onMounted(() => {
-  initMap()
+	initMap()
 
-  setInterval(() => {
-    entitiesSource.refresh()
-  }, 60000)
+	setInterval(() => {
+		entitiesSourceRefresh()
+		console.log('Timed Refresh of entities source')
+	}, 10000)
 
-  // doesn't work
-  // setInterval(() => {
-  //   entitiesSource.forEachFeature((feature) => {
-  //     const speed = feature.get('speed') || 0
-  //     const angle = feature.get('angle') || 0
-      
-  //     const geometry = feature.getGeometry()
+	let lastUpdateTime = Date.now()
+	let currentTime = lastUpdateTime
+	setInterval(() => {
+		if (map.value) {
+			currentTime = Date.now()
+			const deltaTime = (currentTime - lastUpdateTime)
 
-  //     if (!geometry) return
+			entitiesSource.forEachFeature((feature) => {
+				translateFeature(feature, deltaTime)
+			})
 
-  //     geometry.translate(
-  //       speed * Math.cos(angle * Math.PI / 180),
-  //       speed * Math.sin(angle * Math.PI / 180)
-  //     )
-  //   })
-  // }, 10)  
+			entitiesLayer.changed()
+			lastUpdateTime = currentTime
+		}
+	}, 500)
+
 })
 </script>
 
 <template>
-  <div id="map" class="map"></div>
+	<div id="map" class="map"></div>
 </template>
 
 <style>
 .map {
-  width: 100%;
-  height: 100vh;
+	width: 100%;
+	height: 100vh;
 }
 </style>
